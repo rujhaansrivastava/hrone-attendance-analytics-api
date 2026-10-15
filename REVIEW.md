@@ -1,0 +1,25 @@
+# REVIEW.md
+
+| # | Where | What is wrong | How you'd notice | How it should be fixed |
+|---|---|---|---|---|
+| 1 | `compute_late_minutes` | Uses the punch-in's calendar date and ignores IST/overnight shift date; naive datetimes also make timezone behaviour machine-dependent. | Punch at 09:40:01 for a 09:30 shift or an overnight employee. | Normalize instants to UTC, derive the attendance date in IST, and compare against the shift start instant for that date. |
+| 2 | `compute_late_minutes` | `int(delta / 60)` truncates toward zero and only checks `minutes > 10`; this misses the strict 10-minute-and-one-second boundary. | 09:40:01 should be 10 late minutes, not zero. | Compare elapsed seconds to 600 first, then floor elapsed whole minutes from shift start. |
+| 3 | `compute_work_hours` | Python `round` uses bankers' rounding and binary floats. | Duration whose second decimal tie is exactly halfway. | Decimal arithmetic with `ROUND_HALF_UP`. |
+| 4 | `compute_overtime` | Ignores the 30-minute minimum and does not handle overnight shift end on the next date. | 18:50 should still be zero overtime; overnight out at 06:40 should be 40. | Calculate the shift-end instant for the record's shift date and only count overtime at 30 minutes or more. |
+| 5 | `/health` | Always returns healthy without contacting MongoDB. | Stop MongoDB and call `/health`; starter still says OK. | Ping MongoDB and return 503 if it cannot answer. |
+| 6 | `create_employee` | Check-then-insert is racy and no unique index is created. | Parallel creates with the same `emp_code` can both pass the check. | Enforce uniqueness with a MongoDB unique index and map `DuplicateKeyError` to 409. |
+| 7 | `create_employee` | `created_at=datetime.now()` is naive and local-time dependent. | Run under different server time zones and compare timestamps. | Store UTC BSON datetime and serialize as epoch milliseconds. |
+| 8 | `EmployeeIn` | No format, date, email, length, or distinct-shift validation. | Invalid employee code, impossible date, malformed email, equal shift times. | Validate the contract at the Pydantic boundary. |
+| 9 | `list_employees` | `skip=page * page_size` skips page one, and `total` ignores the department filter. | Page 1 misses the first 20; filtered total disagrees with results. | Use `(page - 1) * page_size` and count with the same query. |
+| 10 | `list_employees` | No page/page-size bounds or stable sort. | page 0, page_size 1000, or changing order between requests. | Validate pagination, cap size at 100, sort by `emp_code`. |
+| 11 | `punch_in` | Does not handle unknown employee before indexing `emp`; timestamp conversion uses local timezone and seconds; accepts invalid statuses/timestamps. | Unknown code causes 500; send epoch seconds or a UTC/IST boundary instant. | Return 404, validate epoch milliseconds, truncate to whole seconds, and calculate the IST attendance date. |
+| 12 | `punch_in` | Check-then-insert without a unique compound index; it also returns Mongo `_id` as an undocumented `id`. | Parallel identical requests or assert response schema. | Unique `(emp_code,date)` index, catch duplicate key as 409, and never expose `_id`. |
+| 13 | `punch_in` | Does not initialize or compute every derived field according to the precise rules. | Grace boundary, overnight shifts, or a punch just over shift start. | Compute all derived fields from UTC instants, employee shift, and R1-R5. |
+| 14 | `list_attendance` | Loads the whole matching collection into Python, sorts there, and paginates after loading. | Large dataset uses excessive memory and latency. | Count in MongoDB and use indexed server-side sort/skip/limit. |
+| 15 | `list_attendance` | Leaks `_id` and emits BSON datetimes rather than epoch milliseconds; missing legacy fields are not normalized. | Validate response JSON against OpenAPI using a seeded legacy record. | Project away `_id`, serialize instants, and supply legacy defaults. |
+| 16 | `list_attendance` | No date validation, range check, status validation, or pagination bounds. | `date_from > date_to`, invalid date, unknown status, negative page. | Validate query parameters and return 422. |
+| 17 | Entire starter | No indexes are initialized at startup. | Inspect indexes or explain a 100k-record list query. | Create idempotent unique and query-supporting indexes at startup. |
+| 18 | Missing endpoints | Punch-out, regularization, four analytics endpoints, and explain endpoint are absent. | Request any of the contract paths. | Implement all paths with specified codes, audit behaviour, and aggregation pipelines. |
+| 19 | Analytics design | Analytics must not fetch the entire collection and aggregate in Python; headcount must include employees with no logs. | Seed a zero-log employee or compare results at scale. | Use MongoDB aggregation, including an employee-driven `$lookup` for department headcount. |
+
+**Reviewed and retained:** `emp_code` is the business key rather than MongoDB `_id`; attendance is addressed by `(emp_code, date)`. `history` belongs only to manual corrections, and analytics should consume stored derived values rather than recomputing them.
