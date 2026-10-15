@@ -1,36 +1,97 @@
-# Employee Attendance & Analytics API
+## Requirements
 
-FastAPI + PyMongo implementation for the HROne Software Engineer Trainee assignment.
+- Python 3.11+
+- MongoDB 6.0+ (MongoDB Atlas or local MongoDB)
+- Git
 
-## Setup
+## Setup and Run Locally
 
-Requires Python 3.11+ and MongoDB 6.0+.
+### 1. Clone the repository
 
 ```bash
+git clone https://github.com/rujhaansrivastava/hrone-attendance-analytics-api.git
+cd hrone-attendance-analytics-api
+```
+
+### 2. Create and activate a virtual environment
+
+**Windows (PowerShell):**
+
+```powershell
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
 ```
 
-Set `MONGO_URI` and `MONGO_DB` in your shell or a local `.env` file (do not commit `.env`). Real environment variables take precedence. For local MongoDB, for example:
+**macOS/Linux:**
 
 ```bash
-docker run --rm -d --name attendance-mongo -p 27017:27017 mongo:7
-python sample_seed.py
-uvicorn app.main:app --port 8000 --reload
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-`GET /health` pings MongoDB. Interactive API docs are available at `/docs`.
+### 3. Install dependencies
 
-## Implemented
+```bash
+python -m pip install -r requirements.txt
+```
 
-- Employee create/list with validation, pagination, and startup indexes
-- Punch-in/punch-out with timestamp validation and attendance business rules
-- Manual regularization with change history and optimistic concurrency check
-- Employee monthly summary, department summary, late leaderboard, daily department trend
-- Explain endpoint for the supported endpoint names
+### 4. Configure MongoDB
 
-## Notes / limitations
+This application supports MongoDB Atlas and local MongoDB.
 
-Analytics are implemented as MongoDB aggregation pipelines. The assignment's hidden data includes edge cases beyond the provided sample, so run your own tests for overnight shifts, exact rounding boundaries, missing records, ties, weekends, and join dates. The explain endpoint should be verified against your MongoDB version and actual query plans before submission. Do not commit secrets, `.env`, a Dockerfile, or a virtual environment.
+Set the following environment variables before starting the application:
+
+- `MONGO_URI`: MongoDB connection string
+- `MONGO_DB`: Database name (default: `attendance_db`)
+
+For MongoDB Atlas, obtain the connection string from your Atlas cluster and use it as `MONGO_URI`. Ensure your database user and network access are configured correctly.
+
+For local MongoDB, use:
+
+```text
+MONGO_URI=mongodb://localhost:27017
+MONGO_DB=attendance_db
+```
+
+Alternatively, configure these variables in a local `.env` file. Do not commit `.env` or database credentials to GitHub. Existing shell environment variables take precedence over values loaded from `.env`.
+
+### 5. Load sample data
+
+After configuring MongoDB, run:
+
+```bash
+python sample_seed.py
+```
+
+**Note:** The seed script clears and reloads the sample `employees` and `attendance_logs` collections. Use it only when resetting those sample collections is acceptable.
+
+### 6. Start the API
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+The API will be available at:
+
+- Interactive API documentation: `http://127.0.0.1:8000/docs`
+- Health check: `http://127.0.0.1:8000/health`
+
+The health endpoint checks connectivity to MongoDB.
+
+## Implemented Features
+
+- Employee creation and listing with validation, pagination, and startup indexes
+- Punch-in and punch-out with timestamp validation and attendance business rules
+- Manual attendance regularization with change history and optimistic concurrency checks
+- Employee monthly attendance summary
+- Department attendance summary
+- Late-arrival leaderboard
+- Daily department attendance trend
+- Query explain endpoint for supported endpoint names
+
+## Notes and Limitations
+
+- Analytics use MongoDB aggregation pipelines.
+- Additional testing is recommended for overnight shifts, rounding boundaries, missing records, ranking ties, weekends, and employee joining dates.
+- The explain endpoint should be verified against the target MongoDB version and actual query plans.
+- Do not commit secrets, `.env` files, virtual environments, or a Dockerfile.
